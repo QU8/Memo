@@ -308,9 +308,6 @@ automation_update(
 | v1.6.0 | 2026-03-28 | 数据存储方案调整：终止华为云盘多端同步方案，改为本地单文件存储（路径：`C:/Users/X/.workbuddy/skills/Memo/records.json`），PC端与微信端统一写入此文件，本机作为24小时在线服务器确保数据一致性 |
 | v1.7.0 | 2026-03-30 | 自动化管理增强：新增直接操作 SQLite 数据库方案作为备用（当 `automation_update` 工具无法找到任务时）；新增 `get_automation_action_after_complete()` 和 `get_automation_action_after_add()` 方法实现自动化同步闭环；路径改为通用占位符，提升技能可复用性 |
 | v1.8.0 | 2026-03-30 | 新增生效日期区间参数（validFrom/validUntil）：可将每周重复的任务变成单次提醒，实现指定日期区间内仅执行一次 |
-| v1.10.0 | 2026-04-02 | 新增口语日期智能解析：`_parse_date()` 自动识别"今天/明天/后天/下周/X月X日"等表达写入 `work_date`；`add_record()` 无需 `--date` 参数即可自动从内容解析；`_extract_time_info()` 改为仅提取纯时间描述，不再误吞日期表达；历史数据已迁移修正 |
-| v1.9.0 | 2026-04-01 | 新增：内置完整 CLI 入口（`python main.py add/search/done/todos/stat/export`），无需 AI 即可直接操作；修复：`export_report` 方法定义行残缺导致调用时报 `AttributeError` |
 | v1.8.1 | 2026-03-30 | 修复：添加待办时自动判断是否设置单次提醒参数；`get_automation_action_after_add()` 新增 `is_single_reminder`、`validFrom`、`validUntil` 返回字段；SKILL.md 明确 AI 调用 automation_update 时必须使用这些参数 |
-
-
-
+| v1.9.0 | 2026-04-01 | 新增：内置完整 CLI 入口（`python main.py add/search/done/todos/stat/export`），无需 AI 即可直接操作；修复：`export_report` 方法定义行残缺导致调用时报 `AttributeError` |
+| v1.10.0 | 2026-04-02 | 新增口语日期智能解析：`_parse_date()` 自动识别"今天/明天/后天/下周/X月X日"等表达写入 `work_date`；`add_record()` 无需 `--date` 参数即可自动从内容解析；`_extract_time_info()` 改为仅提取纯时间描述，不再误吞日期表达；历史数据已迁移修正 |
