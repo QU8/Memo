@@ -2,7 +2,7 @@ skill:
   name: 记事本
   description: 私人工作记录助理，支持添加记录、统计分析、待办管理，数据本地持久化存储（v1.9.0：新增 CLI 入口，修复 export_report 方法）
   version: 1.9.0
-  author: WorkBuddy
+  author: JIAHUI
   type: 工具
   platform: WorkBuddy
 
