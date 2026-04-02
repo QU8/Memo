@@ -1,6 +1,6 @@
 """
-Memo-记事本技能 - 数据操作工具层
-WorkBuddy v2.0.0
+记事本技能 - 数据操作工具层
+WorkBuddy v1.9.0
 
 本文件作为 records.json 的操作辅助工具。
 AI 可直接调用，也可直接读写 JSON 文件。
@@ -82,6 +82,7 @@ class MemoSkill:
             'time_info': self._extract_time_info(content),
             'is_todo': self._is_todo(content),
             'todo_done': False,
+            'reminder_time': None,   # 自定义提醒时间，格式 "HH:MM"，None 表示使用默认 08:00
         }
         record['contact_count'] = len(record['contacts'])
 
@@ -128,13 +129,250 @@ class MemoSkill:
                 return True
         return False
 
+    def get_automation_action_after_complete(self, record_id: str) -> dict:
+        """
+        标记待办完成后，返回需要执行的自动化操作。
+        
+        Args:
+            record_id: 已完成的待办记录 ID
+            
+        Returns:
+            dict: {
+                'action': 'delete' | 'update' | 'none',
+                'work_date': 'yyyy-MM-dd',
+                'automation_name': 'xxx 工作提醒',
+                'remaining_todos': [...],  # 如果 action=update，返回剩余待办
+                'reason': '说明'
+            }
+        """
+        # 找到被完成的记录
+        completed_record = None
+        for r in self.records:
+            if r.get('id') == record_id:
+                completed_record = r
+                break
+        
+        if not completed_record:
+            return {'action': 'none', 'reason': '记录未找到'}
+        
+        work_date = completed_record.get('work_date')
+        if not work_date:
+            return {'action': 'none', 'reason': '无工作日期'}
+        
+        # 检查该日期是否还有其他未完成待办
+        remaining_todos = self.get_pending_todos_for_date(work_date)
+        
+        automation_name = self.get_automation_name(work_date)
+        
+        if not remaining_todos:
+            # 没有其他待办，删除自动化
+            return {
+                'action': 'delete',
+                'work_date': work_date,
+                'automation_name': automation_name,
+                'remaining_todos': [],
+                'reason': f'该日期已无其他未完成待办，应删除自动化任务'
+            }
+        else:
+            # 还有其他待办，更新自动化
+            todo_contents = [t.get('content', '')[:50] for t in remaining_todos]
+            return {
+                'action': 'update',
+                'work_date': work_date,
+                'automation_name': automation_name,
+                'remaining_todos': todo_contents,
+                'reason': f'该日期还有 {len(remaining_todos)} 项未完成待办，应更新自动化任务'
+            }
+
+    def get_automation_action_after_add(self, record_id: str) -> dict:
+        """
+        添加待办后，返回需要执行的自动化操作。
+        
+        Args:
+            record_id: 新添加的待办记录 ID
+            
+        Returns:
+            dict: {
+                'action': 'create' | 'update' | 'none',
+                'work_date': 'yyyy-MM-dd',
+                'automation_name': 'xxx 工作提醒',
+                'all_todos': [...],  # 当天所有待办
+                'reminder_time': 'HH:MM',
+                'reason': '说明'
+            }
+        """
+        # 找到新添加的记录
+        new_record = None
+        for r in self.records:
+            if r.get('id') == record_id:
+                new_record = r
+                break
+        
+        if not new_record:
+            return {'action': 'none', 'reason': '记录未找到'}
+        
+        if not new_record.get('is_todo'):
+            return {'action': 'none', 'reason': '非待办记录'}
+        
+        work_date = new_record.get('work_date')
+        if not work_date:
+            return {'action': 'none', 'reason': '无工作日期'}
+        
+        # 检查该日期是否已有自动化任务（需要查询 WorkBuddy，AI 配合）
+        # 这里返回创建/更新所需的参数，由 AI 检查是否已存在
+        
+        all_todos = self.get_pending_todos_for_date(work_date)
+        todo_contents = [t.get('content', '')[:50] for t in all_todos]
+        
+        # 获取最早的通知时间
+        reminder_time = new_record.get('reminder_time') or '08:00'
+        for t in all_todos:
+            rt = t.get('reminder_time')
+            if rt:
+                if rt < reminder_time:
+                    reminder_time = rt
+        
+        # 判断是否需要设置单次提醒（validFrom/validUntil）
+        # 如果用户明确指定了特定日期的提醒，设置生效日期区间为该日期
+        is_single_reminder = new_record.get('is_single_reminder', False)
+        
+        result = {
+            'action': 'create_or_update',  # AI 需要检查是否已存在
+            'work_date': work_date,
+            'automation_name': self.get_automation_name(work_date),
+            'all_todos': todo_contents,
+            'reminder_time': reminder_time,
+            'is_single_reminder': is_single_reminder,
+            'reason': f'该日期有 {len(all_todos)} 项待办，应创建或更新自动化任务'
+        }
+        
+        # 如果是单次提醒（用户明确要求某一天提醒，而不是重复任务），添加 validFrom/validUntil
+        if is_single_reminder:
+            result['validFrom'] = f'{work_date}T00:00:00'
+            result['validUntil'] = f'{work_date}T23:59:59'
+        
+        return result
+
     def search(self, keyword: str) -> list:
         """按关键词搜索内容"""
         return [r for r in self.records if keyword in r.get('content', '')]
 
+    def update_record(self, record_id: str = None, keyword: str = None, updates: dict = None) -> dict:
+        """
+        更新已有记录的任意字段。可按 ID 或关键词定位记录。
+
+        Args:
+            record_id: 记录 ID（精确匹配，优先使用）
+            keyword:   内容关键词（模糊匹配，当 record_id 未提供时使用；若匹配多条则返回列表供选择）
+            updates:   要更新的字段字典，例如 {'content': '新内容', 'work_type': '会议'}
+
+        Returns:
+            更新后的记录 dict；若未找到返回 None；若关键词匹配多条返回匹配列表
+        """
+        if not updates:
+            return None
+
+        target = None
+
+        # 优先按 ID 精确查找
+        if record_id:
+            for r in self.records:
+                if r.get('id') == record_id:
+                    target = r
+                    break
+
+        # 按关键词模糊查找
+        elif keyword:
+            matches = [r for r in self.records if keyword in r.get('content', '')]
+            if len(matches) == 0:
+                return None
+            if len(matches) > 1:
+                # 返回匹配列表，由 AI 引导用户进一步确认
+                return {'_ambiguous': True, 'matches': matches}
+            target = matches[0]
+
+        if target is None:
+            return None
+
+        # 执行更新
+        target.update(updates)
+
+        # 若更新了 contacts，同步 contact_count
+        if 'contacts' in updates:
+            target['contact_count'] = len(updates['contacts'])
+
+        self.save_records()
+        return target
+
+    def delete_record(self, record_id: str = None, keyword: str = None) -> bool:
+        """
+        删除一条记录。可按 ID 或关键词定位。
+
+        Args:
+            record_id: 记录 ID（精确匹配，优先使用）
+            keyword:   内容关键词（模糊匹配；若匹配多条返回列表供确认）
+
+        Returns:
+            True 表示删除成功；False 表示未找到；dict 表示匹配多条（含 _ambiguous 标志）
+        """
+        if record_id:
+            for i, r in enumerate(self.records):
+                if r.get('id') == record_id:
+                    self.records.pop(i)
+                    self.save_records()
+                    return True
+            return False
+
+        if keyword:
+            matches = [r for r in self.records if keyword in r.get('content', '')]
+            if len(matches) == 0:
+                return False
+            if len(matches) > 1:
+                return {'_ambiguous': True, 'matches': matches}
+            self.records.remove(matches[0])
+            self.save_records()
+            return True
+
+        return False
+
     # ──────────────────────────────────────────
-    # 导出报告
+    # 智能同步辅助（v1.5.0）
     # ──────────────────────────────────────────
+
+    def get_automation_name(self, work_date: str) -> str:
+        """返回指定日期对应的自动化任务名称"""
+        return f"{work_date} 工作提醒"
+
+    def build_reminder_rrule(self, work_date: str, reminder_time: str = None) -> str:
+        """
+        根据 work_date 和 reminder_time 生成 rrule 字符串。
+
+        Args:
+            work_date:     格式 'yyyy-MM-dd'
+            reminder_time: 格式 'HH:MM'，None 则默认 '08:00'
+
+        Returns:
+            rrule 字符串，例如 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0'
+        """
+        day_map = {0: 'MO', 1: 'TU', 2: 'WE', 3: 'TH', 4: 'FR', 5: 'SA', 6: 'SU'}
+        from datetime import date
+        d = date.fromisoformat(work_date)
+        byday = day_map[d.weekday()]
+
+        time_str = reminder_time or '08:00'
+        try:
+            h, m = [int(x) for x in time_str.split(':')]
+        except Exception:
+            h, m = 8, 0
+
+        return f"FREQ=WEEKLY;BYDAY={byday};BYHOUR={h};BYMINUTE={m}"
+
+    def get_pending_todos_for_date(self, work_date: str) -> list:
+        """获取指定日期所有未完成的待办记录"""
+        return [
+            r for r in self.records
+            if r.get('is_todo') and not r.get('todo_done') and r.get('work_date') == work_date
+        ]
 
     def export_report(self, start_date: str, end_date: str, output_path: str = None) -> str:
         """
@@ -323,3 +561,100 @@ class MemoSkill:
         if any(s in content for s in done_signals):
             return False
         return any(s in content for s in todo_signals)
+
+
+# ──────────────────────────────────────────
+# CLI 入口
+# ──────────────────────────────────────────
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='记事本技能 CLI')
+    sub = parser.add_subparsers(dest='cmd', required=True)
+
+    # 添加记录
+    p_add = sub.add_parser('add', help='添加一条记录')
+    p_add.add_argument('content', help='记录内容')
+    p_add.add_argument('--date', '-d', default=None, help='工作日期 YYYY-MM-DD，默认今天')
+    p_add.add_argument('--type', '-t', default=None, help='工作类型')
+    p_add.add_argument('--todo', action='store_true', help='标记为待办')
+    p_add.add_argument('--done', action='store_true', help='标记已完成')
+    p_add.add_argument('--reminder', default=None, help='提醒时间 HH:MM')
+
+    # 标记完成
+    p_done = sub.add_parser('done', help='标记待办完成')
+    p_done.add_argument('id', help='记录ID')
+    p_done.add_argument('--keyword', '-k', default=None, help='关键词（替代ID）')
+
+    # 查询
+    p_search = sub.add_parser('search', help='关键词搜索')
+    p_search.add_argument('keyword', help='搜索关键词')
+
+    # 待办列表
+    sub.add_parser('todos', help='列出所有未完成待办')
+
+    # 统计
+    p_stat = sub.add_parser('stat', help='统计')
+    p_stat.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD')
+    p_stat.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD')
+
+    # 导出
+    p_exp = sub.add_parser('export', help='导出报告')
+    p_exp.add_argument('start', help='开始日期 YYYY-MM-DD')
+    p_exp.add_argument('end', help='结束日期 YYYY-MM-DD')
+    p_exp.add_argument('--out', '-o', default=None, help='输出文件路径')
+
+    args = parser.parse_args()
+    s = MemoSkill()
+
+    if args.cmd == 'add':
+        extra = {}
+        if args.type:
+            extra['work_type'] = args.type
+        if args.todo:
+            extra['is_todo'] = True
+        if args.done:
+            extra['todo_done'] = True
+        if args.reminder:
+            extra['reminder_time'] = args.reminder
+        r = s.add_record(args.content, work_date=args.date, extra_fields=extra or None)
+        print(f"OK: {r['id']}")
+
+    elif args.cmd == 'done':
+        if args.keyword:
+            results = s.search(args.keyword)
+            if len(results) == 1:
+                rid = results[0]['id']
+            else:
+                print(f"找到 {len(results)} 条记录，请用ID精确指定：")
+                for r in results:
+                    print(f"  {r['id']}  {r['content'][:40]}")
+                exit(1)
+        else:
+            rid = args.id
+        ok = s.mark_todo_done(rid)
+        print('OK' if ok else 'FAIL: 未找到记录')
+
+    elif args.cmd == 'search':
+        for r in s.search(args.keyword):
+            print(f"{r['id']}  [{r['work_date']}] {r['content'][:50]}")
+
+    elif args.cmd == 'todos':
+        for r in s.get_todos():
+            print(f"{r['id']}  [{r['work_date']}] {r['content'][:50]}")
+
+    elif args.cmd == 'stat':
+        from datetime import date, timedelta
+        today = date.today()
+        start = args.start or (today - timedelta(days=30)).strftime('%Y-%m-%d')
+        end = args.end or today.strftime('%Y-%m-%d')
+        recs = s.filter_by_date(start, end)
+        todos = [r for r in recs if r.get('is_todo')]
+        done = [r for r in todos if r.get('todo_done')]
+        print(f"统计区间：{start} ~ {end}")
+        print(f"总记录：{len(recs)} 条")
+        print(f"待办总数：{len(todos)}，已完成：{len(done)}，未完成：{len(todos)-len(done)}")
+
+    elif args.cmd == 'export':
+        path = s.export_report(args.start, args.end, args.out)
+        print(f"已导出：{path}")
