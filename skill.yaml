@@ -1,7 +1,7 @@
 skill:
   name: 记事本
-  description: 私人工作记录助理，支持添加记录、统计分析、待办管理，数据本地持久化存储（v1.10.0：新增口语日期智能解析，add_record 无需 --date 即可自动识别日期）
-  version: 1.10.0
+  description: 私人工作记录助理，支持添加记录、统计分析、待办管理，数据本地持久化存储（v1.11.0：封堵直接操作 records.json 的活口，统一走实例方法，避免去重和自动化逻辑失效）
+  version: 1.11.0
   author: WorkBuddy
   type: 工具
   platform: WorkBuddy
