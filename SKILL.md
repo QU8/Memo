@@ -1,10 +1,10 @@
 ---
 name: 记事本
 description: 这个技能应在用户需要记录工作事项、查询历史记录、生成工作统计报告或管理待办事项时使用。支持口语化输入，数据持久化存储在本地 JSON 文件中，实现长期记忆。
-version: 1.9.0
-author: JIAHUI
-contact: jiahui@china.com.cn
-updated: 2026-04-01
+version: 1.10.0
+author: 贾辉
+contact: 18612296798
+updated: 2026-04-02
 ---
 
 ## 技能概述
@@ -309,6 +309,6 @@ automation_update(
 | v1.7.0 | 2026-03-30 | 自动化管理增强：新增直接操作 SQLite 数据库方案作为备用（当 `automation_update` 工具无法找到任务时）；新增 `get_automation_action_after_complete()` 和 `get_automation_action_after_add()` 方法实现自动化同步闭环；路径改为通用占位符，提升技能可复用性 |
 | v1.8.0 | 2026-03-30 | 新增生效日期区间参数（validFrom/validUntil）：可将每周重复的任务变成单次提醒，实现指定日期区间内仅执行一次 |
 | v1.8.1 | 2026-03-30 | 修复：添加待办时自动判断是否设置单次提醒参数；`get_automation_action_after_add()` 新增 `is_single_reminder`、`validFrom`、`validUntil` 返回字段；SKILL.md 明确 AI 调用 automation_update 时必须使用这些参数 |
-| v1.9.0 | 2026-04-01 | 新增：内置完整 CLI 入口（`python main.py add/search/done/todos/stat/export`），无需 AI 即可直接操作；修复：`export_report` 方法定义行残缺导致调用时报 `AttributeError` |
+
 
 

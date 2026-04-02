@@ -1,9 +1,15 @@
 """
 记事本技能 - 数据操作工具层
-WorkBuddy v1.9.0
+WorkBuddy v1.10.0
 
 本文件作为 records.json 的操作辅助工具。
 AI 可直接调用，也可直接读写 JSON 文件。
+
+v1.10.0 更新：
+- 新增 _parse_date() 方法，智能解析口语日期（今天/明天/下周/X月X日等）
+- add_record() 在 work_date 为空时自动从内容中解析日期
+- _extract_time_info() 改为仅提取纯时间描述，日期表达不再误填
+- 附带历史数据迁移脚本 fix_colloquial_dates()
 """
 
 import json
@@ -56,7 +62,12 @@ class MemoSkill:
             新增的记录 dict
         """
         now = datetime.now()
-        today_str = work_date or now.strftime('%Y-%m-%d')
+        # 优先级：显式参数 > 内容中解析 > 今天
+        if work_date:
+            today_str = work_date
+        else:
+            today_str = self._parse_date(content)
+            # _parse_date 返回今天时，说明没有日期语义，正常使用今天即可
 
         # 去重检查
         for r in self.records:
@@ -547,13 +558,94 @@ class MemoSkill:
         return contacts
 
     def _extract_time_info(self, content: str) -> str:
-        for word in ['上午', '下午', '晚上', '早上', '凌晨']:
+        # 只提取纯时间描述，不含日期语义
+        # 日期表达由 _parse_date 处理，写入 work_date
+        pure_time_words = ['上午', '下午', '晚上', '早上', '凌晨']
+        for word in pure_time_words:
             if word in content:
                 return word
         match = re.search(r'(\d{1,2})[点:](\d{2})?', content)
         if match:
             return match.group(0)
-        return '未标注'
+        return ''  # 语义日期不在这里，避免误填
+
+    def _parse_date(self, content: str) -> str:
+        """
+        从内容中解析口语日期，返回标准 'yyyy-MM-dd'。
+        若无日期语义或解析失败，返回今天。
+        """
+        now = datetime.now()
+        today = now.date()
+
+        # 精确匹配 "yyyy-MM-dd" 格式
+        std_match = re.search(r'(\d{4}-\d{2}-\d{2})', content)
+        if std_match:
+            return std_match.group(1)
+
+        # 匹配 "X月X日" / "X月X号"
+        md_match = re.search(r'(\d{1,2})月(\d{1,2})[日号]', content)
+        if md_match:
+            month, day = int(md_match.group(1)), int(md_match.group(2))
+            try:
+                return f"{today.year}-{month:02d}-{day:02d}"
+            except ValueError:
+                pass
+
+        # "今天"
+        if '今天' in content:
+            return today.isoformat()
+
+        # "明天"
+        if '明天' in content:
+            return (today + timedelta(days=1)).isoformat()
+
+        # "后天"
+        if '后天' in content:
+            return (today + timedelta(days=2)).isoformat()
+
+        # "大后天"
+        if '大后天' in content:
+            return (today + timedelta(days=3)).isoformat()
+
+        # "下周"（下周周一）
+        if re.search(r'下周', content):
+            days_ahead = 7 - today.weekday()  # 距下周一的天数
+            if days_ahead <= 0:
+                days_ahead += 7
+            next_monday = today + timedelta(days=days_ahead)
+            return next_monday.isoformat()
+
+        # "下周X"（下周几）
+        weekday_map = {'一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 0, '天': 0}
+        weekday_match = re.search(r'下周([一二三四五六日天])', content)
+        if weekday_match:
+            target_weekday = weekday_map[weekday_match.group(1)]
+            days_ahead = 7 - today.weekday() + target_weekday
+            if days_ahead <= 7:  # 确保在下周
+                days_ahead += 7
+            target = today + timedelta(days=days_ahead)
+            return target.isoformat()
+
+        # "本周X" / "这周X"
+        weekday_match2 = re.search(r'本周([一二三四五六日天])', content)
+        if not weekday_match2:
+            weekday_match2 = re.search(r'这周([一二三四五六日天])', content)
+        if weekday_match2:
+            target_weekday = weekday_map[weekday_match2.group(1)]
+            days_diff = target_weekday - today.weekday()
+            if days_diff < 0:
+                days_diff += 7
+            target = today + timedelta(days=days_diff)
+            return target.isoformat()
+
+        # "下周内" / "近期" / "这段时间" → 今天
+        vague_future = ['下周内', '近期', '近期内', '这段时间', '最近', '最近几天']
+        for v in vague_future:
+            if v in content:
+                return today.isoformat()
+
+        # 解析失败，返回今天
+        return today.isoformat()
 
     def _is_todo(self, content: str) -> bool:
         todo_signals = ['下周', '明天', '待处理', '要去', '需要', '再去', '等上班', '上班后', '下次']
