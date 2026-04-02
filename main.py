@@ -1,15 +1,13 @@
 """
 记事本技能 - 数据操作工具层
-WorkBuddy v1.10.0
+WorkBuddy v1.11.0
 
-本文件作为 records.json 的操作辅助工具。
-AI 可直接调用，也可直接读写 JSON 文件。
+本文件是 records.json 的操作工具。
+AI 仅通过 MemoSkill 实例方法操作，禁止直接读写 records.json——
+去重检查和自动化同步逻辑均依赖实例方法，绕过会导致重复记录和提醒失效。
 
-v1.10.0 更新：
-- 新增 _parse_date() 方法，智能解析口语日期（今天/明天/下周/X月X日等）
-- add_record() 在 work_date 为空时自动从内容中解析日期
-- _extract_time_info() 改为仅提取纯时间描述，日期表达不再误填
-- 附带历史数据迁移脚本 fix_colloquial_dates()
+v1.11.0 更新：
+- 封堵安全活口：移除"直接读写 records.json"选项，统一走实例方法
 """
 
 import json

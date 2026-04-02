@@ -1,10 +1,10 @@
 ---
 name: 记事本
 description: 这个技能应在用户需要记录工作事项、查询历史记录、生成工作统计报告或管理待办事项时使用。支持口语化输入，数据持久化存储在本地 JSON 文件中，实现长期记忆。
-version: 1.10.0
+version: 1.11.0
 author: JIAHUI
 contact: jiahui@china.com.cn
-updated: 2026-04-02
+updated: 2026-04-03
 ---
 
 ## 技能概述
@@ -50,7 +50,7 @@ updated: 2026-04-02
    - `reminder_time`：提醒时间，格式 "HH:MM"（如 "16:00"），用户未指定时为 null，提醒触发时间默认为 08:00
    - `is_single_reminder`：是否为单次提醒。用户说"明天下午3点提醒"时为 true（只在指定日期触发一次）；用户说"每周三提醒"时为 false（重复任务）。此字段影响 validFrom/validUntil 参数的自动设置
 
-2. 调用 `main.py` 中的 `MemoSkill().add_record()` 写入记录，或直接操作 `records.json`。
+2. 统一调用 `MemoSkill().add_record()` 写入记录。**禁止直接读写 records.json**——去重检查和自动化同步逻辑都依赖实例方法，绕过会导致重复记录和提醒失效。
 
 3. 写入前检查 content + work_date 是否重复，避免重复写入。
 
@@ -311,3 +311,4 @@ automation_update(
 | v1.8.1 | 2026-03-30 | 修复：添加待办时自动判断是否设置单次提醒参数；`get_automation_action_after_add()` 新增 `is_single_reminder`、`validFrom`、`validUntil` 返回字段；SKILL.md 明确 AI 调用 automation_update 时必须使用这些参数 |
 | v1.9.0 | 2026-04-01 | 新增：内置完整 CLI 入口（`python main.py add/search/done/todos/stat/export`），无需 AI 即可直接操作；修复：`export_report` 方法定义行残缺导致调用时报 `AttributeError` |
 | v1.10.0 | 2026-04-02 | 新增口语日期智能解析：`_parse_date()` 自动识别"今天/明天/后天/下周/X月X日"等表达写入 `work_date`；`add_record()` 无需 `--date` 参数即可自动从内容解析；`_extract_time_info()` 改为仅提取纯时间描述，不再误吞日期表达；历史数据已迁移修正 |
+| v1.11.0 | 2026-04-03 | **安全修复**：移除"直接操作 records.json"选项，统一走 `MemoSkill` 实例方法；避免绕过去重检查和自动化同步逻辑导致重复记录和提醒失效 |
