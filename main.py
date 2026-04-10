@@ -1,10 +1,15 @@
 """
 记事本技能 - 数据操作工具层
-WorkBuddy v1.11.0
+WorkBuddy v1.12.0
 
 本文件是 records.json 的操作工具。
 AI 仅通过 MemoSkill 实例方法操作，禁止直接读写 records.json——
 去重检查和自动化同步逻辑均依赖实例方法，绕过会导致重复记录和提醒失效。
+
+v1.12.0 更新：
+- 智能搜索：search() 方法支持分词匹配和多关键词OR匹配
+- 用户说"华夏卡"可匹配"华夏银行信用卡"，无需精确对应
+- 支持空格分隔的多关键词搜索（如"华夏 注销"）
 
 v1.11.0 更新：
 - 封堵安全活口：移除"直接读写 records.json"选项，统一走实例方法
@@ -263,8 +268,72 @@ class MemoSkill:
         return result
 
     def search(self, keyword: str) -> list:
-        """按关键词搜索内容"""
-        return [r for r in self.records if keyword in r.get('content', '')]
+        """
+        智能关键词搜索（v1.12.0）。
+        
+        支持以下匹配模式：
+        1. 精确匹配：如果关键词完整出现在内容中，直接返回
+        2. 分词匹配：如果精确匹配失败，自动提取2-3字核心词进行匹配
+        3. 多关键词OR：支持空格分隔的多关键词，任意一个匹配即返回
+        
+        Examples:
+            - "华夏卡" → 自动拆分为["华夏"]，匹配"华夏银行信用卡"
+            - "华夏 注销" → 包含"华夏"或"注销"的记录都会返回
+            - "华夏银行信用卡" → 精确匹配
+        """
+        content_lower = keyword.lower().strip()
+        
+        # 1. 先尝试精确匹配
+        exact_matches = [r for r in self.records if keyword in r.get('content', '')]
+        if exact_matches:
+            return exact_matches
+        
+        # 2. 尝试多关键词OR匹配（空格分隔）
+        if ' ' in keyword:
+            keywords = keyword.split()
+            results = []
+            seen_ids = set()
+            for kw in keywords:
+                # 对每个关键词递归调用（但避免无限递归）
+                for r in self.records:
+                    if kw in r.get('content', '') and r.get('id') not in seen_ids:
+                        results.append(r)
+                        seen_ids.add(r.get('id'))
+            return results
+        
+        # 3. 分词匹配：提取核心词（2-3字）
+        # "华夏卡" → ["华夏", "卡"]
+        # "华夏银行" → ["华夏", "银行"]
+        core_words = []
+        
+        # 取前2-3字作为核心词
+        if len(keyword) >= 2:
+            core_words.append(keyword[:2])
+        if len(keyword) >= 3:
+            core_words.append(keyword[:3])
+        
+        # 提取中文词汇（连续2字以上的组合）
+        import re
+        chinese_words = re.findall(r'[\u4e00-\u9fa5]{2,}', keyword)
+        for w in chinese_words:
+            if w not in core_words:
+                core_words.append(w)
+        
+        # 用核心词进行匹配
+        if core_words:
+            results = []
+            seen_ids = set()
+            for r in self.records:
+                content = r.get('content', '')
+                for cw in core_words:
+                    if cw in content and r.get('id') not in seen_ids:
+                        results.append(r)
+                        seen_ids.add(r.get('id'))
+                        break  # 一条记录只添加一次
+            return results
+        
+        # 4. 都没匹配到，返回空列表
+        return []
 
     def update_record(self, record_id: str = None, keyword: str = None, updates: dict = None) -> dict:
         """

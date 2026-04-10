@@ -1,10 +1,10 @@
 ---
 name: 记事本
 description: 这个技能应在用户需要记录工作事项、查询历史记录、生成工作统计报告或管理待办事项时使用。支持口语化输入，数据持久化存储在本地 JSON 文件中，实现长期记忆。
-version: 1.11.0
+version: 1.12.0
 author: JIAHUI
 contact: jiahui@china.com.cn
-updated: 2026-04-03
+updated: 2026-04-10
 ---
 
 ## 技能概述
@@ -312,3 +312,4 @@ automation_update(
 | v1.9.0 | 2026-04-01 | 新增：内置完整 CLI 入口（`python main.py add/search/done/todos/stat/export`），无需 AI 即可直接操作；修复：`export_report` 方法定义行残缺导致调用时报 `AttributeError` |
 | v1.10.0 | 2026-04-02 | 新增口语日期智能解析：`_parse_date()` 自动识别"今天/明天/后天/下周/X月X日"等表达写入 `work_date`；`add_record()` 无需 `--date` 参数即可自动从内容解析；`_extract_time_info()` 改为仅提取纯时间描述，不再误吞日期表达；历史数据已迁移修正 |
 | v1.11.0 | 2026-04-03 | **安全修复**：移除"直接操作 records.json"选项，统一走 `MemoSkill` 实例方法；避免绕过去重检查和自动化同步逻辑导致重复记录和提醒失效 |
+| v1.12.0 | 2026-04-10 | **智能搜索**：`search()` 方法支持分词匹配和多关键词OR匹配，用户说"华夏卡"可匹配"华夏银行信用卡"，无需精确对应；支持空格分隔的多关键词搜索（如"华夏 注销"） |
