@@ -1,10 +1,14 @@
 """
 记事本技能 - 数据操作工具层
-WorkBuddy v1.12.0
+WorkBuddy v1.13.0
 
 本文件是 records.json 的操作工具。
 AI 仅通过 MemoSkill 实例方法操作，禁止直接读写 records.json——
 去重检查和自动化同步逻辑均依赖实例方法，绕过会导致重复记录和提醒失效。
+
+v1.13.0 更新：
+- 数据安全防护：save_records() 增加三层防护（写入前自动备份、记录数对比警告、AUTO-MERGE自动合并）
+- 移除未实现的图标安装功能
 
 v1.12.0 更新：
 - 智能搜索：search() 方法支持分词匹配和多关键词OR匹配
@@ -44,7 +48,35 @@ class MemoSkill:
         return []
 
     def save_records(self):
-        """保存所有记录"""
+        """保存所有记录（写入前自动备份上一版，防止意外覆盖丢失数据）"""
+        # 安全防护：写入前备份上一版
+        if os.path.exists(RECORD_FILE):
+            backup_path = RECORD_FILE + '.bak'
+            try:
+                import shutil
+                shutil.copy2(RECORD_FILE, backup_path)
+            except Exception:
+                pass  # 备份失败不阻断正常写入
+        # 安全防护：读取已有文件，合并而非覆盖
+        existing = []
+        if os.path.exists(RECORD_FILE):
+            try:
+                with open(RECORD_FILE, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+            except (json.JSONDecodeError, Exception):
+                existing = []
+        # 如果 self.records 比已有记录少很多，可能是误操作，发出警告
+        if existing and len(self.records) < len(existing) * 0.5:
+            import sys
+            print(f"WARNING: 即将写入 {len(self.records)} 条记录，但文件中有 {len(existing)} 条。"
+                  f"可能存在数据丢失风险！如确认覆盖，请重新调用。", file=sys.stderr)
+            # 自动合并：保留已有记录中不在 self.records 里的条目
+            existing_ids = {r.get('id') for r in existing}
+            self_ids = {r.get('id') for r in self.records}
+            missing = [r for r in existing if r.get('id') not in self_ids]
+            if missing:
+                self.records.extend(missing)
+                print(f"AUTO-MERGE: 已自动合并 {len(missing)} 条缺失记录", file=sys.stderr)
         with open(RECORD_FILE, 'w', encoding='utf-8') as f:
             json.dump(self.records, f, ensure_ascii=False, indent=2)
 
